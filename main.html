@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basit Satranç Oyunu</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .game-container {
+            margin: 20px 0;
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            border: 5px solid #654321;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+        }
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .white {
+            background-color: #f0d9b5;
+        }
+        .black {
+            background-color: #b58863;
+        }
+        .piece {
+            font-size: 40px;
+            cursor: pointer;
+            z-index: 10;
+            user-select: none;
+            transition: transform 0.1s;
+        }
+        .piece:hover {
+            transform: scale(1.1);
+        }
+        .highlight {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 0, 0.4);
+            pointer-events: none;
+        }
+        .possible-move {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: rgba(0, 128, 0, 0.4);
+            pointer-events: none;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            font-size: 18px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .instructions {
+            margin-top: 20px;
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            max-width: 600px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Satranç Oyunu</h1>
+    <div class="game-container">
+        <div class="board" id="chess-board"></div>
+        <div class="status" id="status">Sıra: Beyaz</div>
+        <div class="controls">
+            <button id="reset-btn">Oyunu Sıfırla</button>
+        </div>
+    </div>
+    
+    <div class="instructions">
+        <h3>Nasıl Oynanır?</h3>
+        <p>1. Taşı seçmek için üzerine tıklayın</p>
+        <p>2. Yeşil daireler taşın gidebileceği kareleri gösterir</p>
+        <p>3. Taşı hareket ettirmek için gitmek istediğiniz kareye tıklayın</p>
+        <p>4. Sıra beyaz oyuncudadır, sonra siyah sırayla devam eder</p>
+        <p>5. Oyunu yeniden başlatmak için "Oyunu Sıfırla" düğmesine tıklayın</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const board = document.getElementById('chess-board');
+            const statusDisplay = document.getElementById('status');
+            const resetButton = document.getElementById('reset-btn');
+            
+            let selectedPiece = null;
+            let currentPlayer = 'white'; // 'white' or 'black'
+            
+            // Satranç tahtasındaki parçaların başlangıç konumları
+            const initialBoardState = [
+                ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'], // 8. satır (siyah)
+                ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'], // 7. satır
+                [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '], // 6. satır
+                [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '], // 5. satır
+                [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '], // 4. satır
+                [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '], // 3. satır
+                ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'], // 2. satır
+                ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']  // 1. satır (beyaz)
+            ];
+            
+            let boardState = JSON.parse(JSON.stringify(initialBoardState));
+            
+            // Taş haritalama: kod -> Unicode karakter
+            const pieces = {
+                'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟',
+                'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙',
+                ' ': ' '
+            };
+            
+            // Taşın rengini belirleyen fonksiyon
+            function getPieceColor(piece) {
+                if (piece === ' ') return null;
+                return piece === piece.toUpperCase() ? 'white' : 'black';
+            }
+            
+            // Tahtayı oluşturan fonksiyon
+            function createBoard() {
+                board.innerHTML = '';
+                
+                for (let row = 0; row < 8; row++) {
+                    for (let col = 0; col < 8; col++) {
+                        const square = document.createElement('div');
+                        square.className = `square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
+                        square.dataset.row = row;
+                        square.dataset.col = col;
+                        
+                        const piece = document.createElement('div');
+                        piece.className = 'piece';
+                        piece.textContent = pieces[boardState[row][col]];
+                        piece.dataset.piece = boardState[row][col];
+                        
+                        square.appendChild(piece);
+                        board.appendChild(square);
+                        
+                        square.addEventListener('click', handleSquareClick);
+                    }
+                }
+            }
+            
+            // Kareye tıklama olayını işleyen fonksiyon
+            function handleSquareClick(event) {
+                const clickedSquare = event.currentTarget;
+                const row = parseInt(clickedSquare.dataset.row);
+                const col = parseInt(clickedSquare.dataset.col);
+                const pieceElement = clickedSquare.querySelector('.piece');
+                const pieceCode = boardState[row][col];
+                const pieceColor = getPieceColor(pieceCode);
+                
+                // Tüm vurgulamaları temizle
+                clearHighlights();
+                
+                // Zaten bir taş seçiliyse ve geçerli bir hamle yapılmaya çalışılıyorsa
+                if (selectedPiece) {
+                    const selectedRow = parseInt(selectedPiece.parentElement.dataset.row);
+                    const selectedCol = parseInt(selectedPiece.parentElement.dataset.col);
+
+                    // Eğer geçerli bir hamleyse taşı hareket ettir
+                    if (isValidMove(selectedRow, selectedCol, row, col)) {
+                        movePiece(selectedRow, selectedCol, row, col);
+                        selectedPiece = null;
+                        
+                        // Sırayı değiştir
+                        currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+                        statusDisplay.textContent = `Sıra: ${currentPlayer === 'white' ? 'Beyaz' : 'Siyah'}`;
+                        return;
+                    }
+                    
+                    // Eğer aynı taşa tekrar tıklanırsa seçimi iptal et
+                    if (selectedRow === row && selectedCol === col) {
+                        selectedPiece = null;
+                        return;
+                    }
+                }
+                
+                // Yeni bir taş seçme
+                if (pieceCode !== ' ' && pieceColor === currentPlayer) {
+                    selectedPiece = pieceElement;
+                    
+                    // Seçilen taşı vurgula
+                    const highlight = document.createElement('div');
+                    highlight.className = 'highlight';
+                    clickedSquare.appendChild(highlight);
+                    
+                    // Olası hamleleri göster
+                    showPossibleMoves(row, col);
+                }
+            }
+            
+            // Olası hamleleri gösteren fonksiyon
+            function showPossibleMoves(row, col) {
+                const piece = boardState[row][col];
+                const pieceType = piece.toLowerCase();
+                const pieceColor = getPieceColor(piece);
+                
+                // Piyon hareketleri
+                if (pieceType === 'p') {
+                    const direction = pieceColor === 'white' ? -1 : 1;
+                    
+                    // İleri hareket
+                    if (isInBounds(row + direction, col) && boardState[row + direction][col] === ' ') {
+                        highlightPossibleMove(row + direction, col);
+                        
+                        // İlk hamlede iki kare ileri
+                        const startRow = pieceColor === 'white' ? 6 : 1;
+                        if (row === startRow && boardState[row + 2 * direction][col] === ' ') {
+                            highlightPossibleMove(row + 2 * direction, col);
+                        }
+                    }
+                    
+                    // Çapraz yakalama
+                    if (isInBounds(row + direction, col - 1) && 
+                        boardState[row + direction][col - 1] !== ' ' && 
+                        getPieceColor(boardState[row + direction][col - 1]) !== pieceColor) {
+                        highlightPossibleMove(row + direction, col - 1);
+                    }
+                    
+                    if (isInBounds(row + direction, col + 1) && 
+                        boardState[row + direction][col + 1] !== ' ' && 
+                        getPieceColor(boardState[row + direction][col + 1]) !== pieceColor) {
+                        highlightPossibleMove(row + direction, col + 1);
+                    }
+                }
+                
+                // Kale hareketleri
+                if (pieceType === 'r') {
+                    // Yatay ve dikey hareketler
+                    const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                    
+                    for (const [dr, dc] of directions) {
+                        let r = row + dr;
+                        let c = col + dc;
+                        
+                        while (isInBounds(r, c)) {
+                            if (boardState[r][c] === ' ') {
+                                highlightPossibleMove(r, c);
+                            } else {
+                                if (getPieceColor(boardState[r][c]) !== pieceColor) {
+                                    highlightPossibleMove(r, c);
+                                }
+                                break;
+                            }
+                            
+                            r += dr;
+                            c += dc;
+                        }
+                    }
+                }
+                
+                // Fil hareketleri
+                if (pieceType === 'b') {
+                    // Çapraz hareketler
+                    const directions = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+                    
+                    for (const [dr, dc] of directions) {
+                        let r = row + dr;
+                        let c = col + dc;
+                        
+                        while (isInBounds(r, c)) {
+                            if (boardState[r][c] === ' ') {
+                                highlightPossibleMove(r, c);
+                            } else {
+                                if (getPieceColor(boardState[r][c]) !== pieceColor) {
+                                    highlightPossibleMove(r, c);
+                                }
+                                break;
+                            }
+                            
+                            r += dr;
+                            c += dc;
+                        }
+                    }
+                }
+                
+                // Vezir hareketleri (kale + fil)
+                if (pieceType === 'q') {
+                    // Yatay, dikey ve çapraz hareketler
+                    const directions = [
+                        [-1, 0], [1, 0], [0, -1], [0, 1],
+                        [-1, -1], [-1, 1], [1, -1], [1, 1]
+                    ];
+                    
+                    for (const [dr, dc] of directions) {
+                        let r = row + dr;
+                        let c = col + dc;
+                        
+                        while (isInBounds(r, c)) {
+                            if (boardState[r][c] === ' ') {
+                                highlightPossibleMove(r, c);
+                            } else {
+                                if (getPieceColor(boardState[r][c]) !== pieceColor) {
+                                    highlightPossibleMove(r, c);
+                                }
+                                break;
+                            }
+                            
+                            r += dr;
+                            c += dc;
+                        }
+                    }
+                }
+                
+                // Kral hareketleri
+                if (pieceType === 'k') {
+                    // Çevredeki 8 kare
+                    const directions = [
+                        [-1, -1], [-1, 0], [-1, 1],
+                        [0, -1],           [0, 1],
+                        [1, -1],  [1, 0],  [1, 1]
+                    ];
+                    
+                    for (const [dr, dc] of directions) {
+                        const r = row + dr;
+                        const c = col + dc;
+                        
+                        if (isInBounds(r, c) && 
+                            (boardState[r][c] === ' ' || getPieceColor(boardState[r][c]) !== pieceColor)) {
+                            highlightPossibleMove(r, c);
+                        }
+                    }
+                }
+                
+                // At hareketleri
+                if (pieceType === 'n') {
+                    // L şeklindeki hareketler
+                    const moves = [
+                        [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+                        [1, -2], [1, 2], [2, -1], [2, 1]
+                    ];
+                    
+                    for (const [dr, dc] of moves) {
+                        const r = row + dr;
+                        const c = col + dc;
+                        
+                        if (isInBounds(r, c) && 
+                            (boardState[r][c] === ' ' || getPieceColor(boardState[r][c]) !== pieceColor)) {
+                            highlightPossibleMove(r, c);
+                        }
+                    }
+                }
+            }
+            
+            // Kare tahtanın içinde mi kontrolü
+            function isInBounds(row, col) {
+                return row >= 0 && row < 8 && col >= 0 && col < 8;
+            }
+            
+            // Hamlenin geçerli olup olmadığını kontrol eden fonksiyon
+            function isValidMove(fromRow, fromCol, toRow, toCol) {
+                // Aynı yerde kalma durumu
+                if (fromRow === toRow && fromCol === toCol) {
+                    return false;
+                }
+                
+                const piece = boardState[fromRow][fromCol];
+                const pieceColor = getPieceColor(piece);
+                const targetPiece = boardState[toRow][toCol];
+                const targetColor = getPieceColor(targetPiece);
+                
+                // Hedef karede kendi taşımız varsa
+                if (targetColor === pieceColor) {
+                    return false;
+                }
+                
+                // Basitleştirilmiş geçerlilik kontrolü:
+                // Yeşil işaretli bir kareye tıklandığında hareket edebilir
+                const squares = document.querySelectorAll('.square');
+                for (const square of squares) {
+                    if (parseInt(square.dataset.row) === toRow && parseInt(square.dataset.col) === toCol) {
+                        return square.querySelector('.possible-move') !== null;
+                    }
+                }
+                
+                return false;
+            }
+            
+            // Taşı hareket ettiren fonksiyon
+            function movePiece(fromRow, fromCol, toRow, toCol) {
+                const piece = boardState[fromRow][fromCol];
+                
+                // Taşı hareket ettir
+                boardState[toRow][toCol] = piece;
+                boardState[fromRow][fromCol] = ' ';
+                
+                // Eğer piyon son sıraya ulaştıysa vezir yap (terfi)
+                if (piece === 'P' && toRow === 0) {
+                    boardState[toRow][toCol] = 'Q';
+                } else if (piece === 'p' && toRow === 7) {
+                    boardState[toRow][toCol] = 'q';
+                }
+                
+                // Tahtayı yeniden oluştur
+                createBoard();
+            }
+            
+            // Olası hamleleri vurgulayan fonksiyon
+            function highlightPossibleMove(row, col) {
+                const squares = document.querySelectorAll('.square');
+                for (const square of squares) {
+                    if (parseInt(square.dataset.row) === row && parseInt(square.dataset.col) === col) {
+                        const possibleMove = document.createElement('div');
+                        possibleMove.className = 'possible-move';
+                        square.appendChild(possibleMove);
+                    }
+                }
+            }
+            
+            // Tüm vurgulamaları temizleyen fonksiyon
+            function clearHighlights() {
+                const highlights = document.querySelectorAll('.highlight');
+                const possibleMoves = document.querySelectorAll('.possible-move');
+                
+                highlights.forEach(h => h.remove());
+                possibleMoves.forEach(m => m.remove());
+            }
+            
+            // Oyunu sıfırlayan fonksiyon
+            function resetGame() {
+                boardState = JSON.parse(JSON.stringify(initialBoardState));
+                selectedPiece = null;
+                currentPlayer = 'white';
+                statusDisplay.textContent = 'Sıra: Beyaz';
+                createBoard();
+                clearHighlights();
+            }
+            
+            // Sıfırlama butonuna olay dinleyicisi ekle
+            resetButton.addEventListener('click', resetGame);
+            
+            // Oyunu başlat
+            createBoard();
+        });
+    </script>
+</body>
+</html>
